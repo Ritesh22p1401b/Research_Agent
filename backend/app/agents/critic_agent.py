@@ -6,6 +6,7 @@ See agentic-research-intelligence-platform.md section 5 for the expected
 from __future__ import annotations
 
 from app.agents.base import call_llm_json
+from app.core.config import get_settings
 from app.core.guardrails import StepBudget
 from app.core.schemas import CriticVerdict
 
@@ -29,7 +30,7 @@ async def run(query: str, evidence: list[dict], analysis: dict, budget: StepBudg
         f"Analysis findings:\n{analysis}\n\n"
         "Evaluate this analysis and respond with the verdict JSON now."
     )
-    parsed, _ = await call_llm_json(SYSTEM_PROMPT, user_prompt, budget)
+    parsed, _ = await call_llm_json(SYSTEM_PROMPT, user_prompt, budget, max_tokens=get_settings().critic_max_tokens)
     if not parsed:
         # Fail open with an explicit issue rather than silently approving bad output.
         return CriticVerdict(approved=False, issues=["Critic agent returned no parseable verdict"], missing_evidence=[])

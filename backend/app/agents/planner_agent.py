@@ -9,6 +9,7 @@ LLM-call overhead.
 from __future__ import annotations
 
 from app.agents.base import call_llm_json
+from app.core.config import get_settings
 from app.core.guardrails import StepBudget
 from app.core.logging import get_logger
 
@@ -32,9 +33,15 @@ Respond with a JSON object ONLY, of the form:
 Do not include any text outside the JSON object."""
 
 
-async def run(query: str, budget: StepBudget) -> list[str]:
-    user_prompt = f'Research question: "{query}"\n\nProduce the sub-questions JSON now.'
-    parsed, _ = await call_llm_json(SYSTEM_PROMPT, user_prompt, budget)
+async def run(query: str, budget: StepBudget, document_titles: list[str] | None = None) -> list[str]:
+    user_prompt = f'Research question: "{query}"\n\n'
+    if document_titles:
+        user_prompt += (
+            "The user attached these documents, so include sub-questions that explore what they cover and the "
+            "topics around them: " + "; ".join(document_titles[:5]) + "\n\n"
+        )
+    user_prompt += "Produce the sub-questions JSON now."
+    parsed, _ = await call_llm_json(SYSTEM_PROMPT, user_prompt, budget, max_tokens=get_settings().planner_max_tokens)
 
     sub_questions = _clean(parsed.get("sub_questions") if parsed else None)
     if not sub_questions:

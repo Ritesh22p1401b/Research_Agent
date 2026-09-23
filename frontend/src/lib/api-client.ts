@@ -3,21 +3,25 @@ import { z } from "zod";
 import {
   type ChatRequest,
   type ChatResponse,
+  type DocumentStatusResponse,
   type DocumentSummary,
   type EvaluateResponse,
   type HealthResponse,
+  type ReportJob,
   type ResearchRequest,
   type ResearchResponse,
   type UploadDocumentsResponse,
   chatResponseSchema,
+  documentStatusResponseSchema,
   documentSummarySchema,
   evaluateResponseSchema,
   healthResponseSchema,
+  reportJobSchema,
   researchResponseSchema,
   uploadDocumentsResponseSchema,
 } from "@/lib/api-types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export class ApiError extends Error {
   status: number;
@@ -87,6 +91,21 @@ export function postEvaluate(): Promise<EvaluateResponse> {
 
 export function getDocuments(): Promise<DocumentSummary[]> {
   return request("/api/documents", z.array(documentSummarySchema));
+}
+
+export function getDocumentStatuses(ids: string[]): Promise<DocumentStatusResponse> {
+  return request(
+    `/api/documents/status?ids=${encodeURIComponent(ids.join(","))}`,
+    documentStatusResponseSchema,
+  );
+}
+
+export function getReportJob(jobId: string): Promise<ReportJob> {
+  return request(`/api/reports/${encodeURIComponent(jobId)}`, reportJobSchema);
+}
+
+export function reportDownloadUrl(jobId: string): string {
+  return `${API_BASE_URL}/api/reports/${encodeURIComponent(jobId)}/download`;
 }
 
 export function uploadDocuments(files: File[]): Promise<UploadDocumentsResponse> {

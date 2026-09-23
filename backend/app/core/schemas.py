@@ -32,12 +32,15 @@ class ChatResponse(BaseModel):
 # --- Research ---------------------------------------------------------------
 class ResearchRequest(BaseModel):
     query: str = Field(..., min_length=3, description="The research question to investigate")
+    document_ids: list[str] = Field(default_factory=list, description="Uploaded documents to ground the research in")
+    mode: Literal["fast", "agentic"] | None = None
+    report_depth: Literal["none", "standard", "comprehensive"] = "none"
 
 
 class Source(BaseModel):
     title: str
     url: str | None = None
-    origin: Literal["web", "knowledge_base"] = "web"
+    origin: Literal["web", "knowledge_base", "uploaded_document"] = "web"
     snippet: str | None = None
 
 
@@ -79,6 +82,7 @@ class ResearchResponse(BaseModel):
     sources: list[Source] = Field(default_factory=list)
     metrics: ResearchMetrics = Field(default_factory=ResearchMetrics)
     error: str | None = None
+    docx_job_id: str | None = None
 
 
 # --- Health -----------------------------------------------------------------
@@ -105,15 +109,42 @@ class DocumentSummary(BaseModel):
     source: str
     chunk_count: int | None = None
     category: str | None = None
-    status: Literal["processing", "completed", "failed"] = "completed"
+    status: Literal["queued", "processing", "indexing", "completed", "failed"] = "completed"
+    progress: int = 0
+    paused: bool = False
+
+
+class IngestionSnapshot(BaseModel):
+    active: int = 0
+    paused: bool = False
+    queued: int = 0
+
+
+class DocumentStatusResponse(BaseModel):
+    documents: list[DocumentSummary] = Field(default_factory=list)
+    ingestion: IngestionSnapshot = Field(default_factory=IngestionSnapshot)
 
 
 class QueuedUpload(BaseModel):
     document_id: str
     filename: str
-    status: Literal["processing"] = "processing"
+    status: Literal["queued"] = "queued"
 
 
 class UploadDocumentsResponse(BaseModel):
     queued: list[QueuedUpload] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+
+
+# --- DOCX report jobs -----------------------------------------------------------
+class ReportJob(BaseModel):
+    job_id: str
+    status: Literal["queued", "running", "completed", "failed"] = "queued"
+    stage: str = "queued"
+    message: str = ""
+    percent: int = 0
+    sections_done: int = 0
+    sections_total: int = 0
+    pages_estimate: int | None = None
+    filename: str | None = None
+    error: str | None = None

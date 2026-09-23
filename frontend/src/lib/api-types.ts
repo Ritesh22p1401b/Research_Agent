@@ -41,7 +41,7 @@ export type ResearchRequest = z.infer<typeof researchRequestSchema>;
 export const sourceSchema = z.object({
   title: z.string(),
   url: z.string().nullable(),
-  origin: z.enum(["web", "knowledge_base"]),
+  origin: z.enum(["web", "knowledge_base", "uploaded_document"]),
   snippet: z.string().nullable(),
 });
 export type Source = z.infer<typeof sourceSchema>;
@@ -81,6 +81,7 @@ export const researchResponseSchema = z.object({
   sources: z.array(sourceSchema).default([]),
   metrics: researchMetricsSchema,
   error: z.string().nullable().default(null),
+  docx_job_id: z.string().nullable().default(null),
 });
 export type ResearchResponse = z.infer<typeof researchResponseSchema>;
 
@@ -110,14 +111,16 @@ export const documentSummarySchema = z.object({
   source: z.string(),
   chunk_count: z.number().nullable().default(null),
   category: z.string().nullable().default(null),
-  status: z.enum(["processing", "completed", "failed"]).default("completed"),
+  status: z.enum(["queued", "processing", "indexing", "completed", "failed"]).default("completed"),
+  progress: z.number().default(0),
+  paused: z.boolean().default(false),
 });
 export type DocumentSummary = z.infer<typeof documentSummarySchema>;
 
 export const queuedUploadSchema = z.object({
   document_id: z.string(),
   filename: z.string(),
-  status: z.literal("processing"),
+  status: z.literal("queued").default("queued"),
 });
 export type QueuedUpload = z.infer<typeof queuedUploadSchema>;
 
@@ -127,9 +130,41 @@ export const uploadDocumentsResponseSchema = z.object({
 });
 export type UploadDocumentsResponse = z.infer<typeof uploadDocumentsResponseSchema>;
 
+export const ingestionSnapshotSchema = z.object({
+  active: z.number().default(0),
+  paused: z.boolean().default(false),
+  queued: z.number().default(0),
+});
+export type IngestionSnapshot = z.infer<typeof ingestionSnapshotSchema>;
+
+export const documentStatusResponseSchema = z.object({
+  documents: z.array(documentSummarySchema).default([]),
+  ingestion: ingestionSnapshotSchema.default({ active: 0, paused: false, queued: 0 }),
+});
+export type DocumentStatusResponse = z.infer<typeof documentStatusResponseSchema>;
+
+// --- DOCX report jobs -----------------------------------------------------
+export const reportJobSchema = z.object({
+  job_id: z.string(),
+  status: z.enum(["queued", "running", "completed", "failed"]),
+  stage: z.string().default(""),
+  message: z.string().default(""),
+  percent: z.number().default(0),
+  sections_done: z.number().default(0),
+  sections_total: z.number().default(0),
+  pages_estimate: z.number().nullable().default(null),
+  filename: z.string().nullable().default(null),
+  error: z.string().nullable().default(null),
+});
+export type ReportJob = z.infer<typeof reportJobSchema>;
+
+export type ResearchMode = "fast" | "agentic";
+export type ReportDepth = "none" | "standard" | "comprehensive";
+
 export const ACCEPTED_DOCUMENT_EXTENSIONS = [
   ".pdf",
   ".docx",
+  ".txt",
   ".md",
   ".markdown",
   ".csv",

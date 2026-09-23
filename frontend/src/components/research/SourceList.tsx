@@ -1,4 +1,4 @@
-import { Globe, Library } from "lucide-react";
+import { FileText, Globe, Library } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type { Source } from "@/lib/api-types";
@@ -15,6 +15,8 @@ export function SourceList({ sources }: { sources: Source[] }) {
           <div className="flex items-center gap-2 font-medium">
             {source.origin === "web" ? (
               <Globe className="size-3.5 text-muted-foreground" />
+            ) : source.origin === "uploaded_document" ? (
+              <FileText className="size-3.5 text-muted-foreground" />
             ) : (
               <Library className="size-3.5 text-muted-foreground" />
             )}

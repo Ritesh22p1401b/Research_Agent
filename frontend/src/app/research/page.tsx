@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { MetricsRow } from "@/components/research/MetricsRow";
 import { ProgressLog } from "@/components/research/ProgressLog";
+import { ReportDownload } from "@/components/research/ReportDownload";
 import { ReportView } from "@/components/research/ReportView";
 import { ResearchForm } from "@/components/research/ResearchForm";
 import { SourceList } from "@/components/research/SourceList";
@@ -25,17 +26,22 @@ export default function ResearchPage() {
         <h1 className="mb-1 text-xl font-semibold">Research</h1>
         <p className="text-sm text-muted-foreground">
           Runs the full Planner {"→"} Research {"→"} Analysis {"→"} Critic {"→"} Report agent pipeline
-          against the knowledge base and the web, with live progress.
+          against the knowledge base, the web and any documents you attach, with live progress - then
+          writes a full business report as a Word document.
         </p>
       </div>
 
-      <ResearchForm onSubmit={start} isPending={isPending} />
+      <ResearchForm
+        onSubmit={(query, options) => start(query, options)}
+        isPending={isPending}
+      />
 
       <ProgressLog events={progress} isPending={isPending} />
 
       {result && (
         <>
           <MetricsRow metrics={result.metrics} />
+          {result.docx_job_id && <ReportDownload jobId={result.docx_job_id} />}
           <ReportView report={result.report} />
           <div>
             <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Sources</h2>

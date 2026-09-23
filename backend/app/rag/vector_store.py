@@ -66,19 +66,27 @@ def search(query_vector: list[float], top_k: int = 10, filters: dict[str, Any] |
 
     qdrant_filter = None
     if filters:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
 
+        # A list value means "any of these" (e.g. a set of document ids), a scalar is an exact match.
         qdrant_filter = Filter(
-            must=[FieldCondition(key=k, match=MatchValue(value=v)) for k, v in filters.items()]
+            must=[
+                FieldCondition(key=k, match=MatchAny(any=list(v)) if isinstance(v, (list, tuple, set)) else MatchValue(value=v))
+                for k, v in filters.items()
+            ]
         )
 
     try:
-        results = client.search(
+        # QdrantClient.search() was removed in newer qdrant-client versions
+        # in favor of query_points(), which returns a QueryResponse wrapping
+        # the hit list in `.points` instead of returning it directly.
+        response = client.query_points(
             collection_name=settings.qdrant_collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
             query_filter=qdrant_filter,
         )
+        results = response.points
     except Exception:  # noqa: BLE001
         logger.warning("Qdrant search failed (is the collection populated/reachable?)", exc_info=True)
         return []
@@ -89,3 +97,20 @@ def search(query_vector: list[float], top_k: int = 10, filters: dict[str, Any] |
         text = payload.pop("text", "")
         hits.append(VectorHit(id=str(point.id), score=point.score, text=text, metadata=payload))
     return hits
+
+
+def delete_by_document(document_id: str) -> None:
+    """Removes every chunk of one document (used to make re-ingestion after an interrupted upload idempotent)."""
+    from qdrant_client.models import FieldCondition, Filter, FilterSelector, MatchValue
+
+    settings = get_settings()
+    client = get_client()
+    try:
+        client.delete(
+            collection_name=settings.qdrant_collection_name,
+            points_selector=FilterSelector(
+                filter=Filter(must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))])
+            ),
+        )
+    except Exception:  # noqa: BLE001 - collection may not exist yet
+        logger.debug("delete_by_document(%s) skipped", document_id, exc_info=True)

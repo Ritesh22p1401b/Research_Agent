@@ -32,8 +32,12 @@ async def update_document(session: AsyncSession, document_id: str, **fields: Any
     await session.commit()
 
 
-async def list_documents(session: AsyncSession, limit: int = 50) -> list[Document]:
-    result = await session.execute(select(Document).limit(limit))
+async def list_documents(session: AsyncSession, limit: int = 50, ids: list[str] | None = None) -> list[Document]:
+    """Newest first, so recent uploads are never hidden behind a large ingested corpus; ``ids`` narrows to specific rows."""
+    query = select(Document).order_by(Document.created_at.desc()).limit(limit)
+    if ids:
+        query = query.where(Document.id.in_(ids))
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 

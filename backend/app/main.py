@@ -5,6 +5,7 @@ Run locally with:
 """
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -12,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import routes_chat, routes_documents, routes_evaluate, routes_health, routes_research
+from app.api import routes_chat, routes_documents, routes_evaluate, routes_health, routes_reports, routes_research
 from app.core.config import get_settings
 from app.core.guardrails import GuardrailError
 from app.core.logging import get_logger, setup_logging
@@ -27,7 +28,22 @@ settings = get_settings()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting Agentic Research Intelligence Platform (env=%s)", settings.app_env)
     logger.info("LLM endpoint: %s (model=%s)", settings.llm_base_url, settings.llm_model)
+
+    # Warm the embedder/reranker/BM25 index in the background so the first research request
+    # doesn't pay the model-loading cost, and resume any uploads interrupted by a restart.
+    from app.rag.embeddings import warm_up
+    from app.rag.ingestion_manager import get_ingestion_manager
+
+    async def _recover() -> None:
+        try:
+            await get_ingestion_manager().recover_interrupted()
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not recover interrupted uploads (Postgres unavailable?)", exc_info=True)
+
+    background = [asyncio.create_task(asyncio.to_thread(warm_up)), asyncio.create_task(_recover())]
     yield
+    for task in background:
+        task.cancel()
 
 
 app = FastAPI(
@@ -50,6 +66,7 @@ app.include_router(routes_chat.router)
 app.include_router(routes_research.router)
 app.include_router(routes_evaluate.router)
 app.include_router(routes_documents.router)
+app.include_router(routes_reports.router)
 
 
 @app.exception_handler(GuardrailError)

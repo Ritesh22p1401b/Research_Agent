@@ -6,7 +6,7 @@ instead of waiting on one long request.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
@@ -38,7 +38,12 @@ async def _persist_trace(query: str, result: dict[str, Any]) -> None:
 
 @router.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest) -> ResearchResponse:
-    result = await run_research(request.query)
+    result = await run_research(
+        request.query,
+        document_ids=request.document_ids,
+        mode=request.mode,
+        report_depth=request.report_depth,
+    )
 
     response = ResearchResponse(
         status=result["status"],
@@ -46,6 +51,7 @@ async def research(request: ResearchRequest) -> ResearchResponse:
         sources=result["sources"],
         metrics=ResearchMetrics(**result["metrics"]),
         error=result.get("error"),
+        docx_job_id=result.get("docx_job_id"),
     )
 
     await _persist_trace(request.query, result)
@@ -53,9 +59,16 @@ async def research(request: ResearchRequest) -> ResearchResponse:
 
 
 @router.get("/research/stream")
-async def research_stream(query: str = Query(..., min_length=3)) -> StreamingResponse:
+async def research_stream(
+    query: str = Query(..., min_length=3),
+    document_ids: str = Query("", description="Comma-separated ids of uploaded documents to ground the research in"),
+    mode: Literal["fast", "agentic"] | None = Query(None),
+    report_depth: Literal["none", "standard", "comprehensive"] = Query("standard"),
+) -> StreamingResponse:
+    ids = [i for i in document_ids.split(",") if i]
+
     async def event_generator():
-        async for event in run_research_stream(query):
+        async for event in run_research_stream(query, document_ids=ids, mode=mode, report_depth=report_depth):
             yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
             if event["event"] == "done":
                 await _persist_trace(query, event["data"])

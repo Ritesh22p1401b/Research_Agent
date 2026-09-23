@@ -43,13 +43,22 @@ class BM25Index:
             return
         self.build(self._documents + documents)
 
-    def search(self, query: str, top_k: int = 10, category: str | None = None) -> list[tuple[BM25Document, float]]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        category: str | None = None,
+        document_ids: list[str] | None = None,
+    ) -> list[tuple[BM25Document, float]]:
         if self._bm25 is None or not self._documents:
             return []
         scores = self._bm25.get_scores(_tokenize(query))
         pairs = zip(self._documents, scores)
         if category:
             pairs = (p for p in pairs if p[0].metadata.get("category") == category)
+        if document_ids:
+            wanted = set(document_ids)
+            pairs = (p for p in pairs if p[0].metadata.get("document_id") in wanted)
         ranked = sorted(pairs, key=lambda pair: pair[1], reverse=True)
         return [(doc, float(score)) for doc, score in ranked[:top_k] if score > 0]
 

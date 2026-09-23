@@ -23,13 +23,23 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     # --- LLM ---
-    llm_base_url: str = "http://localhost:8000/v1"
+    # NOTE: this points at a custom transformers-based FastAPI wrapper
+    # (GET /health, POST /generate), NOT an OpenAI-compatible /v1 API - no
+    # /v1 suffix here. See app/llm/client.py's module docstring for the
+    # emulation layer this requires (flattened prompts, text-based tool
+    # calling). llm_supports_reasoning is currently unused: this server
+    # hardcodes enable_thinking=False and exposes no toggle for it.
+    llm_base_url: str = "http://localhost:8000"
     llm_api_key: str = "EMPTY"
     llm_model: str = "Qwen/Qwen3-8B"
-    llm_timeout_seconds: float = 120.0
+    llm_timeout_seconds: float = 240.0
+    # Max simultaneous /generate calls from this backend. The Colab wrapper is a
+    # sync FastAPI handler (threadpool), so a few concurrent calls overlap on the GPU.
+    llm_max_concurrency: int = 2
     llm_max_retries: int = 2
     llm_temperature: float = 0.3
     llm_max_tokens: int = 2048
+    llm_top_p: float = 0.8
     llm_supports_reasoning: bool = True
     llm_supports_tool_calling: bool = True
 
@@ -65,13 +75,34 @@ class Settings(BaseSettings):
     # fan a broad question out into up to 4 sub-questions, each running its
     # own bounded research pass, before analysis/critic/report even start.
     max_agent_steps: int = 20
-    max_research_retries: int = 2
+    max_research_retries: int = 1
     max_tool_calls: int = 18
     max_search_results: int = 5
     tool_timeout_seconds: float = 15.0
     db_query_row_limit: int = 200
     db_query_timeout_seconds: float = 5.0
     db_table_allowlist: str = "documents,execution_traces,evaluation_runs"
+
+    # --- Research speed ---
+    # "fast": planner -> parallel retrieval (KB + web + uploaded docs, no LLM ReAct loops)
+    #         -> one analysis call -> critic -> report (4-5 LLM calls total).
+    # "agentic": the original ReAct loops per sub-question (slowest, most flexible).
+    research_mode: str = "fast"
+    planner_max_tokens: int = 300
+    analysis_max_tokens: int = 1400
+    critic_max_tokens: int = 500
+    report_max_tokens: int = 1800
+
+    # --- Document ingestion (uploads) ---
+    ingest_batch_size: int = 16  # chunks embedded+upserted per step; pause/resume happens between steps
+    ingest_autostart_on_upload: bool = True
+    max_upload_mb: int = 50
+
+    # --- DOCX report generation ---
+    docx_max_pages: int = 100
+    docx_section_concurrency: int = 2
+    docx_fetch_pages: bool = True  # fetch full text of top web results for deeper chapters
+    reports_dir: str = "data/reports"
 
     # --- MCP ---
     mcp_tool_allowlist: str = "web_search,search_knowledge_base,database_query,get_document"

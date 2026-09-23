@@ -95,6 +95,7 @@ async def call_llm_json(
     system_prompt: str,
     user_prompt: str,
     budget: StepBudget,
+    max_tokens: int | None = None,
 ) -> tuple[dict[str, Any], LLMResult]:
     """Single structured-output LLM call (used by Critic/Report agents)."""
     client = get_llm_client()
@@ -103,7 +104,8 @@ async def call_llm_json(
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
-        ]
+        ],
+        max_tokens=max_tokens,
     )
     budget.record_llm_call()
     return parsed, result

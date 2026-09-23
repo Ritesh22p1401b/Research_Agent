@@ -13,8 +13,10 @@ export function useDocuments(enabled: boolean) {
     // finishes, without the user needing to reopen the dialog.
     refetchInterval: (query) => {
       if (!enabled) return false;
-      const stillProcessing = query.state.data?.some((doc) => doc.status === "processing");
-      return stillProcessing ? 3000 : false;
+      const stillProcessing = query.state.data?.some(
+        (doc) => doc.status === "queued" || doc.status === "processing" || doc.status === "indexing",
+      );
+      return stillProcessing ? 2000 : false;
     },
   });
 }

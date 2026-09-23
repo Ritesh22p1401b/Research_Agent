@@ -20,7 +20,11 @@ function describeStage(event: ProgressEvent): string {
         : "Narrow enough to research directly";
     }
     case "research":
-      return `Gathered ${event.evidence_count ?? 0} evidence item(s) so far`;
+      return `Gathered ${event.evidence_count ?? 0} evidence item(s) so far${
+        Number(event.uploaded_docs_count ?? 0) > 0
+          ? ` (${event.uploaded_docs_count} from your uploaded documents)`
+          : ""
+      }`;
     case "analysis":
       return `${event.key_findings_count ?? 0} key finding(s), ${event.competitors_count ?? 0} competitor(s) identified`;
     case "critic":

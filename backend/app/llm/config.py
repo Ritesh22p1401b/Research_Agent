@@ -20,6 +20,7 @@ class LLMSettings:
     max_retries: int
     temperature: float
     max_tokens: int
+    top_p: float
     supports_reasoning: bool
     supports_tool_calling: bool
 
@@ -34,6 +35,7 @@ def get_llm_settings() -> LLMSettings:
         max_retries=s.llm_max_retries,
         temperature=s.llm_temperature,
         max_tokens=s.llm_max_tokens,
+        top_p=s.llm_top_p,
         supports_reasoning=s.llm_supports_reasoning,
         supports_tool_calling=s.llm_supports_tool_calling,
     )

@@ -13,4 +13,6 @@ class ResearchState(TypedDict, total=False):
     report: dict[str, Any]
     sources: list[dict[str, Any]]
     retries: int
+    document_ids: list[str]
+    mode: str
     errors: list[str]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.agents.base import call_llm_json
+from app.core.config import get_settings
 from app.core.guardrails import StepBudget
 from app.core.schemas import ReportSections
 
@@ -50,7 +51,7 @@ async def run(
         + hedge_block
         + "\n\nProduce the final report JSON now."
     )
-    parsed, _ = await call_llm_json(SYSTEM_PROMPT, user_prompt, budget)
+    parsed, _ = await call_llm_json(SYSTEM_PROMPT, user_prompt, budget, max_tokens=get_settings().report_max_tokens)
     if not parsed:
         return ReportSections(
             executive_summary="Report generation failed to produce structured output.",

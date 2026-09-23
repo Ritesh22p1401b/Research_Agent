@@ -19,6 +19,7 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
+from app.agents import evidence as evidence_gathering
 from app.agents import (
     analysis_agent,
     critic_agent,
@@ -32,6 +33,7 @@ from app.core.logging import get_logger
 from app.core.schemas import Source
 from app.graph.state import ResearchState
 from app.observability.langfuse_client import trace_span
+from app.tools.documents import get_document
 
 logger = get_logger(__name__)
 
@@ -40,12 +42,29 @@ logger = get_logger(__name__)
 SUB_QUESTION_MAX_TOOL_ITERATIONS = 3
 
 
-def _build_graph(budget: StepBudget, tool_timeout: float):
+async def _document_titles(document_ids: list[str]) -> list[str]:
+    from app.rag.ingestion_manager import get_ingestion_manager
+
+    manager = get_ingestion_manager()
+    titles: list[str] = []
+    for document_id in document_ids:
+        staged = manager.get(document_id)
+        if staged is not None:
+            titles.append(staged.title)
+            continue
+        stored = await get_document(document_id)
+        if stored.get("title"):
+            titles.append(stored["title"])
+    return titles
+
+
+def _build_graph(budget: StepBudget, tool_timeout: float, mode: str = "fast"):
     graph = StateGraph(ResearchState)
 
     async def planner_node(state: ResearchState) -> dict[str, Any]:
+        titles = await _document_titles(state.get("document_ids") or [])
         with trace_span("planner_agent", query=state["query"]):
-            sub_questions = await planner_agent.run(state["query"], budget)
+            sub_questions = await planner_agent.run(state["query"], budget, document_titles=titles)
         logger.info("Planner produced %d sub-question(s) for %r", len(sub_questions), state["query"])
         return {"sub_questions": sub_questions}
 
@@ -58,20 +77,29 @@ def _build_graph(budget: StepBudget, tool_timeout: float):
         else:
             queries = state.get("sub_questions") or [state["query"]]
 
-        with trace_span("research_agent", query=state["query"], sub_questions=queries):
-            new_evidence: list[dict[str, Any]] = []
-            for sub_query in queries:
-                result = await research_agent.run(
-                    sub_query, budget, tool_timeout, max_tool_iterations=SUB_QUESTION_MAX_TOOL_ITERATIONS
+        document_ids = state.get("document_ids") or []
+        with trace_span("research_agent", query=state["query"], sub_questions=queries, mode=mode):
+            if mode == "fast":
+                # No LLM round-trips: KB + web + uploaded documents for every sub-question, in parallel.
+                new_evidence = await evidence_gathering.gather_evidence(
+                    queries, document_ids, budget=budget, tool_timeout=max(tool_timeout, 20.0)
                 )
-                for item in result["evidence"]:
-                    item.setdefault("sub_question", sub_query)
-                new_evidence.extend(result["evidence"])
+            else:
+                new_evidence = await evidence_gathering.gather_document_evidence(queries, document_ids)
+                for sub_query in queries:
+                    result = await research_agent.run(
+                        sub_query, budget, tool_timeout, max_tool_iterations=SUB_QUESTION_MAX_TOOL_ITERATIONS
+                    )
+                    for item in result["evidence"]:
+                        item.setdefault("sub_question", sub_query)
+                    new_evidence.extend(result["evidence"])
         return {"evidence": state.get("evidence", []) + new_evidence}
 
     async def analysis_node(state: ResearchState) -> dict[str, Any]:
         with trace_span("analysis_agent"):
-            analysis = await analysis_agent.run(state["query"], state.get("evidence", []), budget, tool_timeout)
+            analysis = await analysis_agent.run(
+                state["query"], state.get("evidence", []), budget, tool_timeout, use_tools=mode != "fast"
+            )
         return {"analysis": analysis}
 
     async def critic_node(state: ResearchState) -> dict[str, Any]:
@@ -149,19 +177,36 @@ def _package_result(
     }
 
 
-async def run_research(query: str) -> dict[str, Any]:
-    """Entry point used by POST /api/research."""
+def _new_budget() -> StepBudget:
     settings = get_settings()
-    budget = StepBudget(
+    return StepBudget(
         max_steps=settings.max_agent_steps,
         max_tool_calls=settings.max_tool_calls,
         max_retries=settings.max_research_retries,
     )
-    graph = _build_graph(budget, settings.tool_timeout_seconds)
+
+
+def _resolve_mode(mode: str | None) -> str:
+    resolved = (mode or get_settings().research_mode or "fast").lower()
+    return resolved if resolved in {"fast", "agentic"} else "fast"
+
+
+async def run_research(
+    query: str,
+    document_ids: list[str] | None = None,
+    mode: str | None = None,
+    report_depth: str = "none",
+) -> dict[str, Any]:
+    """Entry point used by POST /api/research (and the evaluation runner)."""
+    settings = get_settings()
+    budget = _new_budget()
+    resolved_mode = _resolve_mode(mode)
+    graph = _build_graph(budget, settings.tool_timeout_seconds, resolved_mode)
 
     start = time.perf_counter()
+    initial = {"query": query, "evidence": [], "errors": [], "document_ids": document_ids or [], "mode": resolved_mode}
     try:
-        final_state: dict[str, Any] = await graph.ainvoke({"query": query, "evidence": [], "errors": []})
+        final_state: dict[str, Any] = await graph.ainvoke(initial)
         status, error = "completed", None
     except GuardrailError as exc:
         logger.warning("Research workflow stopped by guardrail: %s", exc)
@@ -170,7 +215,21 @@ async def run_research(query: str) -> dict[str, Any]:
         logger.exception("Research workflow failed unexpectedly")
         final_state, status, error = {"report": {}, "sources": []}, "failed", str(exc)
 
-    return _package_result(final_state, budget, start, status, error)
+    result = _package_result(final_state, budget, start, status, error)
+    _maybe_start_docx(result, query, final_state, report_depth)
+    return result
+
+
+def _maybe_start_docx(result: dict[str, Any], query: str, final_state: dict[str, Any], report_depth: str) -> None:
+    """Kicks off the background DOCX report job for a finished run (never blocks or fails the research result)."""
+    if report_depth == "none" or result["status"] != "completed":
+        return
+    try:
+        from app.reporting.jobs import start_report_job
+
+        result["docx_job_id"] = start_report_job(query, final_state, result["sources"], report_depth)
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not start the DOCX report job")
 
 
 # --- Progress payloads for each node, kept small since they're streamed ------
@@ -178,7 +237,12 @@ def _node_progress(node_name: str, delta: dict[str, Any]) -> dict[str, Any]:
     if node_name == "planner":
         return {"stage": "planner", "sub_questions": delta.get("sub_questions", [])}
     if node_name == "research":
-        return {"stage": "research", "evidence_count": len(delta.get("evidence", []))}
+        evidence = delta.get("evidence", [])
+        return {
+            "stage": "research",
+            "evidence_count": len(evidence),
+            "uploaded_docs_count": sum(1 for e in evidence if e.get("origin") == "uploaded_document"),
+        }
     if node_name == "analysis":
         analysis = delta.get("analysis", {}) or {}
         return {
@@ -199,7 +263,12 @@ def _node_progress(node_name: str, delta: dict[str, Any]) -> dict[str, Any]:
     return {"stage": node_name}
 
 
-async def run_research_stream(query: str) -> AsyncIterator[dict[str, Any]]:
+async def run_research_stream(
+    query: str,
+    document_ids: list[str] | None = None,
+    mode: str | None = None,
+    report_depth: str = "standard",
+) -> AsyncIterator[dict[str, Any]]:
     """Streaming counterpart to ``run_research``, used by GET /api/research/stream.
 
     Yields ``{"event": ..., "data": ...}`` dicts as each graph node finishes,
@@ -209,15 +278,18 @@ async def run_research_stream(query: str) -> AsyncIterator[dict[str, Any]]:
     to build one result-handling code path.
     """
     settings = get_settings()
-    budget = StepBudget(
-        max_steps=settings.max_agent_steps,
-        max_tool_calls=settings.max_tool_calls,
-        max_retries=settings.max_research_retries,
-    )
-    graph = _build_graph(budget, settings.tool_timeout_seconds)
+    budget = _new_budget()
+    resolved_mode = _resolve_mode(mode)
+    graph = _build_graph(budget, settings.tool_timeout_seconds, resolved_mode)
 
     start = time.perf_counter()
-    final_state: dict[str, Any] = {"query": query, "evidence": [], "errors": []}
+    final_state: dict[str, Any] = {
+        "query": query,
+        "evidence": [],
+        "errors": [],
+        "document_ids": document_ids or [],
+        "mode": resolved_mode,
+    }
     try:
         async for update in graph.astream(final_state, stream_mode="updates"):
             for node_name, delta in update.items():
@@ -233,4 +305,6 @@ async def run_research_stream(query: str) -> AsyncIterator[dict[str, Any]]:
         status, error = "failed", str(exc)
         yield {"event": "error", "data": {"message": error}}
 
-    yield {"event": "done", "data": _package_result(final_state, budget, start, status, error)}
+    result = _package_result(final_state, budget, start, status, error)
+    _maybe_start_docx(result, query, final_state, report_depth)
+    yield {"event": "done", "data": result}

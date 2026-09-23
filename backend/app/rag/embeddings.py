@@ -37,3 +37,20 @@ def embed_query(query: str) -> list[float]:
 def embedding_dimension() -> int:
     model = _get_model()
     return int(model.get_sentence_embedding_dimension())
+
+
+def warm_up() -> None:
+    """Loads the embedder, reranker and BM25 index up-front (called once at app startup).
+
+    Without this the first research request pays 10-30s of model loading in the middle of the run.
+    """
+    from app.rag.bm25 import get_bm25_index
+    from app.rag.reranker import _get_cross_encoder
+
+    try:
+        _get_model()
+        _get_cross_encoder()
+        get_bm25_index()
+        logger.info("RAG models warmed up")
+    except Exception:  # noqa: BLE001
+        logger.warning("RAG warm-up failed (will lazy-load on first use)", exc_info=True)

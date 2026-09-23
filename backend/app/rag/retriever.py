@@ -29,7 +29,9 @@ class RetrievedChunk:
     rerank_score: float | None = None
 
 
-def hybrid_search(query: str, top_k: int = 20, category: str | None = None) -> list[RetrievedChunk]:
+def hybrid_search(
+    query: str, top_k: int = 20, category: str | None = None, document_ids: list[str] | None = None
+) -> list[RetrievedChunk]:
     """Runs dense + sparse search and fuses results with Reciprocal Rank Fusion.
 
     When `category` is given, both the Qdrant payload filter and the BM25
@@ -37,8 +39,13 @@ def hybrid_search(query: str, top_k: int = 20, category: str | None = None) -> l
     retrieval" scoping the Research Agent can opt into per query.
     """
     query_vector = embed_query(query)
-    dense_hits = vector_store.search(query_vector, top_k=top_k, filters={"category": category} if category else None)
-    sparse_hits = get_bm25_index().search(query, top_k=top_k, category=category)
+    filters: dict[str, Any] = {}
+    if category:
+        filters["category"] = category
+    if document_ids:
+        filters["document_id"] = list(document_ids)
+    dense_hits = vector_store.search(query_vector, top_k=top_k, filters=filters or None)
+    sparse_hits = get_bm25_index().search(query, top_k=top_k, category=category, document_ids=document_ids)
 
     fused: dict[str, RetrievedChunk] = {}
 
@@ -60,11 +67,17 @@ def hybrid_search(query: str, top_k: int = 20, category: str | None = None) -> l
     return ranked[:top_k]
 
 
-def retrieve(query: str, top_k: int = 5, candidate_pool: int = 20, category: str | None = None) -> list[RetrievedChunk]:
+def retrieve(
+    query: str,
+    top_k: int = 5,
+    candidate_pool: int = 20,
+    category: str | None = None,
+    document_ids: list[str] | None = None,
+) -> list[RetrievedChunk]:
     """Full pipeline: hybrid search -> rerank -> top_k."""
     from app.rag.reranker import rerank
 
-    candidates = hybrid_search(query, top_k=candidate_pool, category=category)
+    candidates = hybrid_search(query, top_k=candidate_pool, category=category, document_ids=document_ids)
     if not candidates:
         logger.info("No retrieval candidates found for query=%r category=%r", query, category)
         return []

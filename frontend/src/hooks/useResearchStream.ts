@@ -1,12 +1,23 @@
 import { useCallback, useRef, useState } from "react";
 
-import { type ResearchResponse, researchResponseSchema } from "@/lib/api-types";
+import {
+  type ReportDepth,
+  type ResearchMode,
+  type ResearchResponse,
+  researchResponseSchema,
+} from "@/lib/api-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export type ProgressEvent = {
   stage: "planner" | "research" | "analysis" | "critic" | "report" | string;
   [key: string]: unknown;
+};
+
+export type StreamOptions = {
+  documentIds?: string[];
+  mode?: ResearchMode;
+  reportDepth?: ReportDepth;
 };
 
 export type ResearchStreamStatus = "idle" | "running" | "completed" | "failed";
@@ -23,14 +34,20 @@ export function useResearchStream() {
   const [error, setError] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
 
-  const start = useCallback((query: string) => {
+  const start = useCallback((query: string, options: StreamOptions = {}) => {
     sourceRef.current?.close();
     setProgress([]);
     setResult(null);
     setError(null);
     setStatus("running");
 
-    const url = `${API_BASE_URL}/api/research/stream?query=${encodeURIComponent(query)}`;
+    const params = new URLSearchParams({ query });
+    if (options.documentIds && options.documentIds.length > 0) {
+      params.set("document_ids", options.documentIds.join(","));
+    }
+    if (options.mode) params.set("mode", options.mode);
+    if (options.reportDepth) params.set("report_depth", options.reportDepth);
+    const url = `${API_BASE_URL}/api/research/stream?${params.toString()}`;
     const source = new EventSource(url);
     sourceRef.current = source;
 
