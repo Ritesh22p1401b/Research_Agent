@@ -1,56 +1,45 @@
 "use client";
 
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 import { MetricsRow } from "@/components/research/MetricsRow";
+import { ProgressLog } from "@/components/research/ProgressLog";
 import { ReportView } from "@/components/research/ReportView";
 import { ResearchForm } from "@/components/research/ResearchForm";
 import { SourceList } from "@/components/research/SourceList";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useResearch } from "@/hooks/useResearch";
+import { useResearchStream } from "@/hooks/useResearchStream";
 
 export default function ResearchPage() {
-  const research = useResearch();
+  const { start, progress, result, status, error, isPending } = useResearchStream();
 
-  const handleSubmit = (query: string) => {
-    research.mutate(query, {
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : "Research request failed");
-      },
-      onSuccess: (data) => {
-        if (data.status === "failed") {
-          toast.error(data.error ?? "Research workflow failed");
-        }
-      },
-    });
-  };
+  useEffect(() => {
+    if (status === "failed" && error) {
+      toast.error(error);
+    }
+  }, [status, error]);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="mb-1 text-xl font-semibold">Research</h1>
         <p className="text-sm text-muted-foreground">
-          Runs the full Research {"→"} Analysis {"→"} Critic {"→"} Report agent pipeline
-          against the knowledge base and the web.
+          Runs the full Planner {"→"} Research {"→"} Analysis {"→"} Critic {"→"} Report agent pipeline
+          against the knowledge base and the web, with live progress.
         </p>
       </div>
 
-      <ResearchForm onSubmit={handleSubmit} isPending={research.isPending} />
+      <ResearchForm onSubmit={start} isPending={isPending} />
 
-      {research.isPending && (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-      )}
+      <ProgressLog events={progress} isPending={isPending} />
 
-      {research.data && (
+      {result && (
         <>
-          <MetricsRow metrics={research.data.metrics} />
-          <ReportView report={research.data.report} />
+          <MetricsRow metrics={result.metrics} />
+          <ReportView report={result.report} />
           <div>
             <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Sources</h2>
-            <SourceList sources={research.data.sources} />
+            <SourceList sources={result.sources} />
           </div>
         </>
       )}

@@ -16,6 +16,8 @@ export function ResultsTable({ results }: { results: Record<string, unknown>[] }
             <th className="p-2 font-medium">Recall</th>
             <th className="p-2 font-medium">Precision</th>
             <th className="p-2 font-medium">Citation acc.</th>
+            <th className="p-2 font-medium">Faithfulness</th>
+            <th className="p-2 font-medium">Completeness</th>
             <th className="p-2 font-medium">Latency</th>
           </tr>
         </thead>
@@ -33,6 +35,10 @@ export function ResultsTable({ results }: { results: Record<string, unknown>[] }
               <td className="p-2">{Number(row.retrieval_recall ?? 0).toFixed(2)}</td>
               <td className="p-2">{Number(row.retrieval_precision ?? 0).toFixed(2)}</td>
               <td className="p-2">{Number(row.citation_accuracy ?? 0).toFixed(2)}</td>
+              <td className="p-2" title={String(row.judge_rationale ?? "")}>
+                {Number(row.judge_faithfulness ?? 0).toFixed(2)}
+              </td>
+              <td className="p-2">{Number(row.judge_completeness ?? 0).toFixed(2)}</td>
               <td className="p-2">{formatMs(Number(row.latency_ms ?? 0))}</td>
             </tr>
           ))}

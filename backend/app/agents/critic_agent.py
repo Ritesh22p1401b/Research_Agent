@@ -14,8 +14,12 @@ You receive the collected evidence and the Analysis Agent's findings. Check:
 - every important claim/number is backed by at least one evidence item
 - there are no unresolved contradictions between sources
 - nothing important seems to be missing
+- separately, flag any claim that IS backed by evidence but only weakly -
+  a single low-quality source, an outdated figure, or partially conflicting
+  sources. These don't have to block approval; they just need hedged
+  language later. List each as a short claim string.
 Respond with a JSON object ONLY:
-{"approved": true|false, "issues": ["..."], "missing_evidence": ["..."]}"""
+{"approved": true|false, "issues": ["..."], "missing_evidence": ["..."], "low_confidence_claims": ["..."]}"""
 
 
 async def run(query: str, evidence: list[dict], analysis: dict, budget: StepBudget) -> CriticVerdict:
@@ -33,4 +37,5 @@ async def run(query: str, evidence: list[dict], analysis: dict, budget: StepBudg
         approved=bool(parsed.get("approved", False)),
         issues=list(parsed.get("issues", [])),
         missing_evidence=list(parsed.get("missing_evidence", [])),
+        low_confidence_claims=list(parsed.get("low_confidence_claims", [])),
     )

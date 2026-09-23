@@ -61,9 +61,12 @@ class Settings(BaseSettings):
     langfuse_enabled: bool = False
 
     # --- Guardrails ---
-    max_agent_steps: int = 12
+    # Bumped from 12/10 to accommodate query decomposition: the planner can
+    # fan a broad question out into up to 4 sub-questions, each running its
+    # own bounded research pass, before analysis/critic/report even start.
+    max_agent_steps: int = 20
     max_research_retries: int = 2
-    max_tool_calls: int = 10
+    max_tool_calls: int = 18
     max_search_results: int = 5
     tool_timeout_seconds: float = 15.0
     db_query_row_limit: int = 200

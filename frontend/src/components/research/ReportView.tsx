@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -76,6 +76,25 @@ export function ReportView({ report }: { report: ReportSections | Record<string,
           <ListSection title="Risks" items={report.risks} />
         </div>
         <ListSection title="Evidence" items={report.evidence} />
+
+        {report.verification && report.verification.low_confidence_claims.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-warning">
+                <HelpCircle className="size-3.5" /> Low-confidence claims
+              </h3>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Weakly or partially supported by evidence - treat with caution.
+              </p>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                {report.verification.low_confidence_claims.map((claim, i) => (
+                  <li key={i}>{claim}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
 
         {report.verification && !report.verification.approved && (
           <>

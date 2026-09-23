@@ -53,6 +53,8 @@ def aggregate(results: list[dict]) -> dict:
         "avg_retrieval_precision": sum(r["retrieval_precision"] for r in results) / n,
         "avg_keyword_coverage": sum(r["keyword_coverage"] for r in results) / n,
         "avg_citation_accuracy": sum(r["citation_accuracy"] for r in results) / n,
+        "avg_judge_faithfulness": sum(r["judge_faithfulness"] for r in results) / n,
+        "avg_judge_completeness": sum(r["judge_completeness"] for r in results) / n,
         "avg_latency_ms": sum(r["latency_ms"] for r in results) / n,
         "avg_llm_calls": sum(r["llm_calls"] for r in results) / n,
         "avg_tool_calls": sum(r["tool_calls"] for r in results) / n,

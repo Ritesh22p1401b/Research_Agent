@@ -3,7 +3,15 @@ import { formatMs, formatNumber } from "@/lib/utils";
 function formatValue(key: string, value: unknown): string {
   if (typeof value !== "number") return String(value);
   if (key.includes("latency")) return formatMs(value);
-  if (key.includes("rate") || key.includes("recall") || key.includes("precision") || key.includes("coverage") || key.includes("accuracy")) {
+  if (
+    key.includes("rate") ||
+    key.includes("recall") ||
+    key.includes("precision") ||
+    key.includes("coverage") ||
+    key.includes("accuracy") ||
+    key.includes("faithfulness") ||
+    key.includes("completeness")
+  ) {
     return `${(value * 100).toFixed(1)}%`;
   }
   return formatNumber(value);

@@ -6,6 +6,7 @@ from typing import Any, TypedDict
 
 class ResearchState(TypedDict, total=False):
     query: str
+    sub_questions: list[str]
     evidence: list[dict[str, Any]]
     analysis: dict[str, Any]
     critic: dict[str, Any]

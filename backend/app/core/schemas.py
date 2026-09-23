@@ -51,6 +51,7 @@ class CriticVerdict(BaseModel):
     approved: bool
     issues: list[str] = Field(default_factory=list)
     missing_evidence: list[str] = Field(default_factory=list)
+    low_confidence_claims: list[str] = Field(default_factory=list)
 
 
 class ReportSections(BaseModel):

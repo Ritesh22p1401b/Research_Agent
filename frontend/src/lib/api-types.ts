@@ -50,6 +50,7 @@ export const criticVerdictSchema = z.object({
   approved: z.boolean(),
   issues: z.array(z.string()).default([]),
   missing_evidence: z.array(z.string()).default([]),
+  low_confidence_claims: z.array(z.string()).default([]),
 });
 export type CriticVerdict = z.infer<typeof criticVerdictSchema>;
 

@@ -28,7 +28,12 @@ Do not include any text outside the JSON object in your final answer."""
 TOOLS = ["web_search", "search_knowledge_base", "get_document"]
 
 
-async def run(query: str, budget: StepBudget, tool_timeout_seconds: float) -> dict:
+async def run(
+    query: str,
+    budget: StepBudget,
+    tool_timeout_seconds: float,
+    max_tool_iterations: int = 4,
+) -> dict:
     user_prompt = f"Research question: {query}\n\nGather evidence to answer this thoroughly."
     result = await run_agent_with_tools(
         system_prompt=SYSTEM_PROMPT,
@@ -36,6 +41,7 @@ async def run(query: str, budget: StepBudget, tool_timeout_seconds: float) -> di
         tool_names=TOOLS,
         budget=budget,
         tool_timeout_seconds=tool_timeout_seconds,
+        max_tool_iterations=max_tool_iterations,
     )
 
     evidence = _parse_evidence(result.content)
