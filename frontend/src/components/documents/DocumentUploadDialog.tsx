@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText, Loader2, PauseCircle, Plus, UploadCloud, X, XCircle } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import { FileDropzone } from "@/components/documents/FileDropzone";
@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { useDocuments, useUploadDocuments } from "@/hooks/useDocuments";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/api-types";
 
-export function DocumentUploadDialog() {
+export function DocumentUploadDialog({ trigger }: { trigger?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [staged, setStaged] = useState<File[]>([]);
 
@@ -56,9 +56,11 @@ export function DocumentUploadDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="icon" title="Upload documents">
-          <Plus />
-        </Button>
+        {trigger ?? (
+          <Button type="button" variant="outline" size="icon" title="Upload documents">
+            <Plus />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

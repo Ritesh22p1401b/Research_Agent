@@ -3,15 +3,16 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from app.core.schemas import ReportJob
-from app.reporting.jobs import get_job, get_job_file
+from app.reporting.jobs import get_job, get_job_file, start_report_job
 from app.reporting.quick_export import build_quick_docx
+from app.reporting.runs import get_run
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -23,6 +24,28 @@ class ExportRequest(BaseModel):
     report: dict[str, Any] = Field(default_factory=dict)
     sources: list[dict[str, Any]] = Field(default_factory=list)
     metrics: dict[str, Any] | None = None
+
+
+class GenerateRequest(BaseModel):
+    run_id: str
+    depth: Literal["overview", "standard", "comprehensive"]
+
+
+@router.post("/generate", response_model=ReportJob)
+async def generate_report(body: GenerateRequest) -> ReportJob:
+    """Starts (or returns the existing) Word-report job for a finished research run at the chosen size."""
+    run = get_run(body.run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="This research session has expired - run the research again")
+    existing = get_job(run.jobs[body.depth]) if body.depth in run.jobs else None
+    if existing is not None and existing.status != "failed":
+        return existing
+    job_id = start_report_job(run.query, run.state, run.sources, body.depth)
+    run.jobs[body.depth] = job_id
+    job = get_job(job_id)
+    if job is None:  # pragma: no cover - the job is registered synchronously
+        raise HTTPException(status_code=500, detail="Could not start the report")
+    return job
 
 
 @router.post("/export")

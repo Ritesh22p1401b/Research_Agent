@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 const ACCEPT_ATTR = ACCEPTED_DOCUMENT_EXTENSIONS.join(",");
 
-function isAccepted(file: File): boolean {
+export function isAccepted(file: File): boolean {
   const name = file.name.toLowerCase();
   return ACCEPTED_DOCUMENT_EXTENSIONS.some((ext) => name.endsWith(ext));
 }

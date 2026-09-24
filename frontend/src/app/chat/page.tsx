@@ -1,10 +1,5 @@
-import { ChatWindow } from "@/components/chat/ChatWindow";
+import { ChatScreen } from "@/components/chat/ChatScreen";
 
 export default function ChatPage() {
-  return (
-    <div className="mx-auto max-w-3xl">
-      <h1 className="mb-4 text-xl font-semibold">Chat</h1>
-      <ChatWindow />
-    </div>
-  );
+  return <ChatScreen presetMode="chat" />;
 }

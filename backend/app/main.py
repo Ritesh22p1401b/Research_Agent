@@ -48,7 +48,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.warning("Could not recover interrupted uploads (Postgres unavailable?)", exc_info=True)
 
-    background = [asyncio.create_task(asyncio.to_thread(warm_up)), asyncio.create_task(_recover())]
+    from app.llm.client import get_llm_client
+
+    background = [
+        asyncio.create_task(asyncio.to_thread(warm_up)),
+        asyncio.create_task(_recover()),
+        # keeps the Colab tunnel warm and the cached LLM health fresh
+        asyncio.create_task(get_llm_client().heartbeat(settings.llm_heartbeat_seconds)),
+    ]
     yield
     for task in background:
         task.cancel()

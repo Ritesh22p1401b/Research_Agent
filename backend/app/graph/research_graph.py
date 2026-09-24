@@ -224,8 +224,16 @@ async def run_research(
 
 
 def _maybe_start_docx(result: dict[str, Any], query: str, final_state: dict[str, Any], report_depth: str) -> None:
-    """Kicks off the background DOCX report job for a finished run (never blocks or fails the research result)."""
-    if report_depth == "none" or result["status"] != "completed":
+    """Caches the finished run (so a report can be generated on demand) and optionally starts a DOCX job now."""
+    if result["status"] != "completed":
+        return
+    try:
+        from app.reporting.runs import save_run
+
+        result["run_id"] = save_run(query, final_state, result["sources"])
+    except Exception:
+        logger.exception("Could not cache the research run for report generation")
+    if report_depth == "none":
         return
     try:
         from app.reporting.jobs import start_report_job

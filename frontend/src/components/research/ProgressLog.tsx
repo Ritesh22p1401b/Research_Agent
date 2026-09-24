@@ -1,7 +1,7 @@
 import { BarChart3, CheckCircle2, FileText, ListTree, Loader2, Search, ShieldCheck } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { ProgressEvent } from "@/hooks/useResearchStream";
+import type { ProgressEvent } from "@/lib/research-stream";
 
 const STAGE_META: Record<string, { label: string; icon: ComponentType<{ className?: string }> }> = {
   planner: { label: "Planning sub-questions", icon: ListTree },
@@ -42,7 +42,7 @@ export function ProgressLog({ events, isPending }: { events: ProgressEvent[]; is
   if (events.length === 0 && !isPending) return null;
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="flex flex-col gap-3 border-l-2 border-border pl-4">
       {events.map((event, i) => {
         const meta = STAGE_META[event.stage] ?? { label: event.stage, icon: CheckCircle2 };
         const Icon = meta.icon;

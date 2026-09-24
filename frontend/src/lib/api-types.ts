@@ -82,6 +82,7 @@ export const researchResponseSchema = z.object({
   metrics: researchMetricsSchema,
   error: z.string().nullable().default(null),
   docx_job_id: z.string().nullable().default(null),
+  run_id: z.string().nullable().default(null),
 });
 export type ResearchResponse = z.infer<typeof researchResponseSchema>;
 
@@ -159,7 +160,8 @@ export const reportJobSchema = z.object({
 export type ReportJob = z.infer<typeof reportJobSchema>;
 
 export type ResearchMode = "fast" | "agentic";
-export type ReportDepth = "none" | "standard" | "comprehensive";
+export type ReportDepth = "none" | "overview" | "standard" | "comprehensive";
+export type ReportSize = Exclude<ReportDepth, "none">;
 
 export const ACCEPTED_DOCUMENT_EXTENSIONS = [
   ".pdf",

@@ -45,7 +45,13 @@ Progress = Callable[..., None]
 DEPTHS: dict[str, dict[str, int]] = {
     "standard": {"chapters": 6, "sections": 3, "words": 380, "evidence": 7, "fetch": 2},
     "comprehensive": {"chapters": 10, "sections": 4, "words": 560, "evidence": 9, "fetch": 3},
+    # overview: a tight 5-6 page briefing
+    "overview": {"chapters": 3, "sections": 2, "words": 230, "evidence": 5, "fetch": 1},
 }
+# Hard page caps per size (comprehensive uses settings.docx_max_pages = 100). Sizes: overview 5-6, standard 15-20,
+# comprehensive 50-100 pages.
+PAGE_CAPS: dict[str, int] = {"overview": 6, "standard": 20}
+MIN_BODY_SECTIONS = 3  # the page cap trims sections from the end but always keeps at least this many
 RESERVED_CHAPTER = re.compile(r"executive summary|recommendation|methodolog|conclusion|source|reference|appendix|risk", re.IGNORECASE)
 CITATION_RE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 
@@ -666,20 +672,21 @@ def _executive_summary(
     conclusion: str,
     id_by_index: list[int],
     critic: dict,
+    compact: bool = False,
 ) -> Chapter:
     blocks: list[Block] = []
     summary = str(report.get("executive_summary", "")).strip()
     if summary:
         blocks.append(Block("p", text=summary))
-    findings = list(report.get("key_findings", []))[:8] or list(analysis.get("key_findings", []))[:8]
+    findings = list(report.get("key_findings", []))[: 5 if compact else 8] or list(analysis.get("key_findings", []))[: 5 if compact else 8]
     if findings:
         blocks.append(Block("h2", text="Key findings"))
         blocks.append(Block("bullets", items=[str(f) for f in findings]))
-    if takeaways:
+    if takeaways and not compact:
         blocks.append(Block("h2", text="Key takeaways by chapter"))
         blocks.append(Block("numbered", items=[f"**{title}.** {text}" for title, text in takeaways[:10]]))
     numbers = [n for n in (analysis.get("numbers") or []) if isinstance(n, dict) and n.get("claim") and n.get("value") is not None]
-    if len(numbers) >= 2:
+    if len(numbers) >= 2 and not compact:
         rows = []
         for n in numbers[:10]:
             idx = n.get("supporting_evidence_index")
@@ -809,6 +816,9 @@ def _appendices(pool: EvidencePool, depth: str) -> list[Chapter]:
             ),
         ],
     )
+    if depth == "overview":  # keep the briefing to a compact source list
+        register.blocks[1].table.rows = register.blocks[1].table.rows[:10]
+        return [register]
     limit = 60 if depth == "standard" else 150
     excerpts = Chapter(
         title="Appendix B - Evidence Excerpts",
@@ -839,7 +849,7 @@ def _fit_to_cap(doc: ReportDoc, cap: int) -> None:
         guard += 1
         body = [c for c in doc.chapters if not c.appendix and c.title not in {"Executive Summary", "Research Methodology and Evidence Base"}]
         candidates = [c for c in body if any(b.kind == "h2" for b in c.blocks)]
-        if not candidates:
+        if not candidates or sum(1 for c in body for b in c.blocks if b.kind == "h2") <= MIN_BODY_SECTIONS:
             break
         chapter = candidates[-1]
         last_h2 = max(i for i, b in enumerate(chapter.blocks) if b.kind == "h2")
@@ -894,6 +904,11 @@ async def build_report(
         logger.warning("Outline generation failed; using the fallback outline", exc_info=True)
         outline = _fallback_outline(query, analysis, cfg)
     chapters_spec = outline["chapters"]
+    if depth == "overview":  # a 5-6 page briefing: no tables, a single chart
+        for ci, chapter in enumerate(chapters_spec):
+            for si, section in enumerate(chapter["sections"]):
+                section["table"] = False
+                section["chart"] = bool(ci == 0 and si == 0)
     total_sections = sum(len(c["sections"]) for c in chapters_spec)
 
     # 2. deep research per chapter ---------------------------------------------
@@ -974,14 +989,26 @@ async def build_report(
             or "web",
         },
     )
-    doc.chapters = [_executive_summary(report, analysis, takeaways, conclusion, id_by_index, critic), *body_chapters]
+    compact = depth == "overview"
+    doc.compact = compact
+    doc.chapters = [_executive_summary(report, analysis, takeaways, conclusion, id_by_index, critic, compact), *body_chapters]
     if risk_chapter:
+        if compact:  # briefing: register only (no heat map), top risks
+            risk_chapter.blocks = [b for b in risk_chapter.blocks if b.kind != "chart"]
+            for b in risk_chapter.blocks:
+                if b.kind == "table" and b.table:
+                    b.table.rows = b.table.rows[:4]
         doc.chapters.append(risk_chapter)
     if recs_chapter and recs_chapter.blocks:
+        if compact:
+            for b in recs_chapter.blocks:
+                if b.kind == "table" and b.table:
+                    b.table.rows = b.table.rows[:4]
         doc.chapters.append(recs_chapter)
-    doc.chapters.append(_methodology(sub_questions, pool, critic, [c["title"] for c in chapters_spec], fallback_sections, document_titles))
+    if not compact:
+        doc.chapters.append(_methodology(sub_questions, pool, critic, [c["title"] for c in chapters_spec], fallback_sections, document_titles))
     doc.chapters.extend(_appendices(pool, depth))
     doc.sources = [SourceRef(i["id"], i["title"], i["url"], i["origin"], i["text"][:300]) for i in pool.items]
 
-    _fit_to_cap(doc, settings.docx_max_pages)
+    _fit_to_cap(doc, min(settings.docx_max_pages, PAGE_CAPS.get(depth, settings.docx_max_pages)))
     return doc

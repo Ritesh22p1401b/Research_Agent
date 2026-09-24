@@ -35,7 +35,11 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 240.0
     # Max simultaneous /generate calls from this backend. The Colab wrapper is a
     # sync FastAPI handler (threadpool), so a few concurrent calls overlap on the GPU.
-    llm_max_concurrency: int = 2
+    llm_max_concurrency: int = 2  # in-flight calls against the old one-at-a-time /generate server
+    llm_max_concurrency_vllm: int = 8  # in-flight calls against vLLM (continuous batching)
+    llm_api_style: str = "auto"  # auto | openai (vLLM /v1/chat/completions) | generate (old Colab wrapper)
+    llm_circuit_cooldown_seconds: float = 15.0  # after repeated failures, fail fast for this long
+    llm_heartbeat_seconds: float = 30.0
     llm_max_retries: int = 2
     llm_temperature: float = 0.3
     llm_max_tokens: int = 2048
@@ -100,8 +104,8 @@ class Settings(BaseSettings):
 
     # --- DOCX report generation ---
     docx_max_pages: int = 100
-    docx_section_concurrency: int = 2
-    eval_concurrency: int = 3  # golden questions evaluated in parallel (the LLM client still caps total in-flight calls)
+    docx_section_concurrency: int = 4
+    eval_concurrency: int = 4  # golden questions evaluated in parallel (the LLM client still caps total in-flight calls)
     eval_max_retries: int = 0  # critic-triggered re-research is skipped in evaluation (it can double a question's cost)
     docx_fetch_pages: bool = True  # fetch full text of top web results for deeper chapters
     reports_dir: str = "data/reports"

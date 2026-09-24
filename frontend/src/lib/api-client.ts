@@ -78,6 +78,39 @@ export function postChat(body: ChatRequest): Promise<ChatResponse> {
   });
 }
 
+/** Streams a plain chat reply token-by-token (SSE over fetch). Calls onDelta for every chunk. */
+export async function streamChat(
+  body: ChatRequest,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new ApiError(`Chat request failed (HTTP ${response.status})`, response.status);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+    for (const event of events) {
+      if (!event.startsWith("data:")) continue;
+      const payload = JSON.parse(event.slice(5).trim()) as { delta?: string; error?: string };
+      if (payload.error) throw new ApiError(payload.error, 502);
+      if (payload.delta) onDelta(payload.delta);
+    }
+  }
+}
+
 export function postCode(body: ChatRequest): Promise<CodeResponse> {
   return request("/api/code", codeResponseSchema, {
     method: "POST",
@@ -111,6 +144,13 @@ export function getDocumentStatuses(ids: string[]): Promise<DocumentStatusRespon
 
 export function getReportJob(jobId: string): Promise<ReportJob> {
   return request(`/api/reports/${encodeURIComponent(jobId)}`, reportJobSchema);
+}
+
+export function generateReport(runId: string, depth: "overview" | "standard" | "comprehensive"): Promise<ReportJob> {
+  return request("/api/reports/generate", reportJobSchema, {
+    method: "POST",
+    body: JSON.stringify({ run_id: runId, depth }),
+  });
 }
 
 export function reportDownloadUrl(jobId: string): string {

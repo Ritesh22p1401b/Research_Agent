@@ -34,7 +34,7 @@ class ResearchRequest(BaseModel):
     query: str = Field(..., min_length=3, description="The research question to investigate")
     document_ids: list[str] = Field(default_factory=list, description="Uploaded documents to ground the research in")
     mode: Literal["fast", "agentic"] | None = None
-    report_depth: Literal["none", "standard", "comprehensive"] = "none"
+    report_depth: Literal["none", "overview", "standard", "comprehensive"] = "none"
 
 
 class Source(BaseModel):
@@ -83,6 +83,7 @@ class ResearchResponse(BaseModel):
     metrics: ResearchMetrics = Field(default_factory=ResearchMetrics)
     error: str | None = None
     docx_job_id: str | None = None
+    run_id: str | None = None  # use with POST /api/reports/generate
 
 
 # --- Health -----------------------------------------------------------------

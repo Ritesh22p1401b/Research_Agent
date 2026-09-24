@@ -26,7 +26,7 @@ def get_client():
     from qdrant_client import QdrantClient
 
     settings = get_settings()
-    return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+    return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key, timeout=30)
 
 
 def ensure_collection() -> None:

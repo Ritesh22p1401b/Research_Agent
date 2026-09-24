@@ -15,6 +15,7 @@ from app.core.logging import get_logger
 from app.core.schemas import ResearchMetrics, ResearchRequest, ResearchResponse
 from app.db.crud import insert_trace
 from app.db.session import get_session_maker
+from app.llm.client import LLMUnavailableError, get_llm_client
 from app.graph.research_graph import run_research, run_research_stream
 
 router = APIRouter(prefix="/api", tags=["research"])
@@ -52,6 +53,7 @@ async def research(request: ResearchRequest) -> ResearchResponse:
         metrics=ResearchMetrics(**result["metrics"]),
         error=result.get("error"),
         docx_job_id=result.get("docx_job_id"),
+        run_id=result.get("run_id"),
     )
 
     await _persist_trace(request.query, result)
@@ -63,11 +65,16 @@ async def research_stream(
     query: str = Query(..., min_length=3),
     document_ids: str = Query("", description="Comma-separated ids of uploaded documents to ground the research in"),
     mode: Literal["fast", "agentic"] | None = Query(None),
-    report_depth: Literal["none", "standard", "comprehensive"] = Query("standard"),
+    report_depth: Literal["none", "overview", "standard", "comprehensive"] = Query("none"),
 ) -> StreamingResponse:
     ids = [i for i in document_ids.split(",") if i]
 
     async def event_generator():
+        try:
+            await get_llm_client().ensure_available()  # fail in ~1s with a clear reason, not after the planner stalls
+        except LLMUnavailableError as exc:
+            yield f"event: error\ndata: {json.dumps({'message': str(exc)})}\n\n"
+            return
         async for event in run_research_stream(query, document_ids=ids, mode=mode, report_depth=report_depth):
             yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
             if event["event"] == "done":

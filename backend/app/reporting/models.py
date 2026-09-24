@@ -62,3 +62,4 @@ class ReportDoc:
     chapters: list[Chapter] = field(default_factory=list)
     sources: list[SourceRef] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
+    compact: bool = False  # short briefing: title block on page 1 instead of a cover page + contents

@@ -291,8 +291,11 @@ class _Builder:
 
     # -- public --------------------------------------------------------------
     def build(self, path: Path) -> None:
-        self._cover()
-        self._toc()
+        if self.report.compact:
+            self._compact_title()
+        else:
+            self._cover()
+            self._toc()
         chapter_no = 0
         appendix_started = False
         for index, chapter in enumerate(self.report.chapters):
@@ -321,6 +324,24 @@ class _Builder:
         if self._break_pending:
             paragraph.paragraph_format.page_break_before = True
             self._break_pending = False
+
+    def _compact_title(self) -> None:
+        """Overview briefings skip the cover page and contents: a title block sits at the top of page 1."""
+        doc = self.doc
+        title = doc.add_paragraph()
+        title.paragraph_format.space_after = Pt(2)
+        run = title.add_run(_clean(self.report.title))
+        run.font.size, run.bold, run.font.color.rgb = Pt(22), True, _rgb(NAVY)
+        if self.report.subtitle:
+            sub = doc.add_paragraph()
+            sub.paragraph_format.space_after = Pt(2)
+            sub_run = sub.add_run(_clean(self.report.subtitle))
+            sub_run.font.size, sub_run.font.color.rgb = Pt(12), _rgb(GREY)
+        meta = doc.add_paragraph()
+        meta.paragraph_format.space_after = Pt(8)
+        meta_run = meta.add_run(f"Overview briefing  |  {self.report.date}  |  Sources: {self.report.meta.get('source_mix', 'web')}")
+        meta_run.font.size, meta_run.italic, meta_run.font.color.rgb = Pt(9), True, _rgb(GREY)
+        _para_border(meta, "bottom", NAVY, size=8)
 
     def _cover(self) -> None:
         doc = self.doc
@@ -657,7 +678,7 @@ def build_docx(report: ReportDoc, path: Path) -> Path:
 
 def estimate_pages(report: ReportDoc) -> int:
     """Rough page estimate (A4, 10.5pt body) used to enforce the page cap before rendering."""
-    pages = 2.0  # cover + contents (contents may spill; counted below)
+    pages = 0.6 if report.compact else 2.0  # cover + contents (contents may spill; counted below)
     headings = sum(1 + sum(1 for b in c.blocks if b.kind == "h2") for c in report.chapters)
     pages += headings / 45
     for chapter in report.chapters:

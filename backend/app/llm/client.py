@@ -39,6 +39,7 @@ import asyncio
 import json
 import time
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -88,16 +89,64 @@ class LLMClient:
 
     def __init__(self) -> None:
         self._settings = get_llm_settings()
+        app_settings = get_settings()
         self._client = httpx.AsyncClient(
             base_url=self._settings.base_url.rstrip("/"),
-            timeout=self._settings.timeout_seconds,
+            # Long read timeout (a generation can take a while) but fail fast when the tunnel is unreachable.
+            timeout=httpx.Timeout(self._settings.timeout_seconds, connect=10.0),
+            limits=httpx.Limits(max_connections=32, max_keepalive_connections=16, keepalive_expiry=120.0),
+            headers={"ngrok-skip-browser-warning": "1"},
         )
-        self._concurrency = max(1, get_settings().llm_max_concurrency)
+        self._configured_style = (app_settings.llm_api_style or "auto").lower()
+        self._style: str | None = None if self._configured_style == "auto" else self._configured_style
+        self._app_settings = app_settings
         self._semaphore: asyncio.Semaphore | None = None
+        # Circuit breaker + cached health (kept fresh by the background heartbeat).
+        self._down_until = 0.0
+        self._failures = 0
+        self._healthy: bool | None = None
+        self._healthy_at = 0.0
 
     @property
     def model(self) -> str:
         return self._settings.model
+
+    # -- connection state -----------------------------------------------------------------------
+    def _open_circuit(self) -> None:
+        self._failures += 1
+        if self._failures >= 2:
+            self._down_until = time.monotonic() + self._app_settings.llm_circuit_cooldown_seconds
+            self._healthy = False
+
+    def _record_success(self) -> None:
+        self._failures = 0
+        self._down_until = 0.0
+        self._healthy, self._healthy_at = True, time.monotonic()
+
+    def _check_circuit(self) -> None:
+        if time.monotonic() < self._down_until:
+            raise LLMUnavailableError(
+                f"The LLM at {self._settings.base_url} is not responding (retrying automatically in a few seconds). "
+                "Start/restart the Colab server and update LLM_BASE_URL in backend/.env if the URL changed."
+            )
+
+    async def _resolve_style(self) -> str:
+        """'openai' (vLLM) or 'generate' (the old transformers wrapper); auto-detected once via /v1/models."""
+        if self._style:
+            return self._style
+        try:
+            response = await self._client.get("/v1/models", timeout=10)
+        except Exception as exc:  # noqa: BLE001
+            raise LLMUnavailableError(f"Cannot reach the LLM at {self._settings.base_url}: {exc}") from exc
+        if response.headers.get("ngrok-error-code"):
+            raise LLMUnavailableError(_offline_message(self._settings.base_url))
+        self._style = "openai" if response.status_code == 200 else "generate"
+        logger.info("LLM API style detected: %s", self._style)
+        return self._style
+
+    def _concurrency_limit(self, style: str) -> int:
+        s = self._app_settings
+        return max(1, s.llm_max_concurrency_vllm if style == "openai" else s.llm_max_concurrency)
 
     @retry(
         reraise=True,
@@ -106,10 +155,53 @@ class LLMClient:
         retry=retry_if_exception(_should_retry),
     )
     async def _call_generate(self, prompt: str, temperature: float, max_tokens: int) -> dict[str, Any]:
+        """Sends one prompt; returns {"response": str, "usage": {...}} whatever the server flavour."""
+        self._check_circuit()
+        style = await self._resolve_style()
         if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(self._concurrency)
+            self._semaphore = asyncio.Semaphore(self._concurrency_limit(style))
         async with self._semaphore:
-            return await self._post_generate(prompt, temperature, max_tokens)
+            try:
+                if style == "openai":
+                    data = await self._post_openai(prompt, temperature, max_tokens)
+                else:
+                    data = await self._post_generate(prompt, temperature, max_tokens)
+            except LLMUnavailableError:
+                self._failures = 2
+                self._open_circuit()
+                raise
+            except (httpx.ConnectError, httpx.TimeoutException):
+                self._open_circuit()
+                raise
+        self._record_success()
+        return data
+
+    def _raise_for_status(self, response: httpx.Response) -> None:
+        if response.status_code >= 400 and response.headers.get("ngrok-error-code"):
+            raise LLMUnavailableError(_offline_message(self._settings.base_url))
+        response.raise_for_status()
+
+    async def _post_openai(self, prompt: str, temperature: float, max_tokens: int) -> dict[str, Any]:
+        response = await self._client.post("/v1/chat/completions", json=self._openai_body(prompt, temperature, max_tokens))
+        self._raise_for_status(response)
+        data = response.json()
+        choice = (data.get("choices") or [{}])[0]
+        content = (choice.get("message") or {}).get("content") or ""
+        return {"response": content, "usage": data.get("usage") or {}}
+
+    def _openai_body(self, prompt: str, temperature: float, max_tokens: int, stream: bool = False) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "model": self._settings.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": self._settings.top_p,
+            # Qwen3 would otherwise spend tokens on a <think> block; the agents want the answer only.
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        if stream:
+            body["stream"] = True
+        return body
 
     async def _post_generate(self, prompt: str, temperature: float, max_tokens: int) -> dict[str, Any]:
         response = await self._client.post(
@@ -124,14 +216,39 @@ class LLMClient:
                 "do_sample": temperature > 0,
             },
         )
-        if response.status_code == 404 and response.headers.get("ngrok-error-code"):
-            raise LLMUnavailableError(
-                "The LLM is offline: the ngrok tunnel "
-                f"({self._settings.base_url}) is not connected to a running Colab server. "
-                "Re-run the Colab notebook and update LLM_BASE_URL in backend/.env if the URL changed."
-            )
-        response.raise_for_status()
+        self._raise_for_status(response)
         return response.json()
+
+    async def stream_text(
+        self, messages: list[dict[str, Any]], temperature: float | None = None, max_tokens: int | None = None
+    ) -> AsyncIterator[str]:
+        """Yields the reply token-by-token (vLLM). On the old /generate server the full text arrives as one chunk."""
+        self._check_circuit()
+        prompt = _flatten_messages(messages, None)
+        temp = temperature if temperature is not None else self._settings.temperature
+        limit = max_tokens if max_tokens is not None else self._settings.max_tokens
+        if await self._resolve_style() != "openai":
+            yield (await self._call_generate(prompt, temp, limit)).get("response", "")
+            return
+        async with self._client.stream(
+            "POST", "/v1/chat/completions", json=self._openai_body(prompt, temp, limit, stream=True)
+        ) as response:
+            if response.status_code >= 400:
+                await response.aread()
+                self._raise_for_status(response)
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    delta = (json.loads(payload).get("choices") or [{}])[0].get("delta", {}).get("content")
+                except ValueError:
+                    continue
+                if delta:
+                    yield delta
+        self._record_success()
 
     async def chat(
         self,
@@ -176,10 +293,10 @@ class LLMClient:
                         "arguments": json.dumps(tool_call.get("arguments", {})),
                     }
                 ],
-                usage=LLMUsage(),
+                usage=_usage(data),
                 latency_ms=latency_ms,
             )
-        return LLMResult(content=raw_text, tool_calls=[], usage=LLMUsage(), latency_ms=latency_ms)
+        return LLMResult(content=raw_text, tool_calls=[], usage=_usage(data), latency_ms=latency_ms)
 
     async def chat_json(
         self,
@@ -198,14 +315,43 @@ class LLMClient:
         return parsed, result
 
     async def health_check(self) -> bool:
-        """Cheap connectivity probe used by GET /health - hits the server's
-        own lightweight ``/health`` route rather than running a generation."""
+        """Cheap connectivity probe (server's own /health route, no generation). Also refreshes the cached state."""
         try:
             response = await self._client.get("/health", timeout=10)
-            return response.status_code == 200
+            ok = response.status_code == 200 and not response.headers.get("ngrok-error-code")
         except Exception:
-            logger.warning("LLM health check failed", exc_info=True)
-            return False
+            logger.debug("LLM health check failed", exc_info=True)
+            ok = False
+        self._healthy, self._healthy_at = ok, time.monotonic()
+        if ok:
+            self._down_until, self._failures = 0.0, 0
+        return ok
+
+    async def ensure_available(self, max_age: float = 15.0) -> None:
+        """Preflight: raises LLMUnavailableError in ~1s if the server is down (instead of failing mid-run)."""
+        if self._healthy and time.monotonic() - self._healthy_at < max_age:
+            return
+        if not await self.health_check():
+            raise LLMUnavailableError(_offline_message(self._settings.base_url))
+
+    async def heartbeat(self, interval: float) -> None:
+        """Background loop: keeps the tunnel warm and the cached health fresh."""
+        while True:
+            await self.health_check()
+            await asyncio.sleep(interval)
+
+
+def _offline_message(base_url: str) -> str:
+    return (
+        f"The LLM is offline: the ngrok tunnel ({base_url}) is not connected to a running Colab server. "
+        "Re-run the Colab notebook and update LLM_BASE_URL in backend/.env if the URL changed."
+    )
+
+
+def _usage(data: dict[str, Any]) -> LLMUsage:
+    u = data.get("usage") or {}
+    inp, out = int(u.get("prompt_tokens", 0) or 0), int(u.get("completion_tokens", 0) or 0)
+    return LLMUsage(input_tokens=inp, output_tokens=out, total_tokens=int(u.get("total_tokens", inp + out) or 0))
 
 
 def _flatten_messages(messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> str:
