@@ -33,6 +33,6 @@ def _check_qdrant() -> str:
 
         get_client().get_collections()
         return "connected"
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.debug("Qdrant health check failed", exc_info=True)
         return "unreachable"

@@ -57,7 +57,7 @@ def load_documents_from_dir(directory: str | Path) -> list[LoadedDocument]:
                 relative_parts = path.relative_to(directory).parts
                 category = relative_parts[0] if len(relative_parts) > 1 else None
                 docs.append(load_document(path, category=category))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception("Failed to load document %s", path)
     return docs
 

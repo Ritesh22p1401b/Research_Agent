@@ -14,6 +14,7 @@ from typing import Any
 
 from app.core.guardrails import StepBudget
 from app.core.logging import get_logger
+from app.learning import store as learned_store
 from app.tools import documents, search
 
 logger = get_logger(__name__)
@@ -96,8 +97,26 @@ async def gather_for_query(
                     "origin": "web",
                 }
             )
+        # Learn from the web: remember what was found so later research (and the coding agent) can reuse it.
+        web_hits = [r for r in web_out.get("results", []) if r.get("snippet")]
+        if web_hits:
+            body = "\n".join(f"- {r.get('title', '')}: {r['snippet']}" for r in web_hits)
+            sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in web_hits]
+            await asyncio.to_thread(learned_store.learn, "web", query, body, sources)
     else:
         logger.warning("Web search failed for %r: %s", query, web_out)
+
+    # Previously learned web knowledge on the same topic (helps when the live search is thin or offline).
+    for entry in await asyncio.to_thread(learned_store.recall, query, None, 2, 0.6):
+        first = (entry.get("sources") or [{}])[0]
+        evidence.append(
+            {
+                "content": entry["content"][:1500],
+                "source_title": first.get("title") or f"Learned: {entry['topic'][:60]}",
+                "source_url": first.get("url") or None,
+                "origin": "web",
+            }
+        )
 
     return [e for e in evidence if e["content"]]
 

@@ -87,7 +87,7 @@ def search(query_vector: list[float], top_k: int = 10, filters: dict[str, Any] |
             query_filter=qdrant_filter,
         )
         results = response.points
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Qdrant search failed (is the collection populated/reachable?)", exc_info=True)
         return []
 
@@ -112,5 +112,5 @@ def delete_by_document(document_id: str) -> None:
                 filter=Filter(must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))])
             ),
         )
-    except Exception:  # noqa: BLE001 - collection may not exist yet
+    except Exception:
         logger.debug("delete_by_document(%s) skipped", document_id, exc_info=True)

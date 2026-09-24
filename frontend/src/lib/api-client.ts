@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   type ChatRequest,
   type ChatResponse,
+  type CodeResponse,
   type DocumentStatusResponse,
   type DocumentSummary,
   type EvaluateResponse,
@@ -12,6 +13,7 @@ import {
   type ResearchResponse,
   type UploadDocumentsResponse,
   chatResponseSchema,
+  codeResponseSchema,
   documentStatusResponseSchema,
   documentSummarySchema,
   evaluateResponseSchema,
@@ -76,6 +78,13 @@ export function postChat(body: ChatRequest): Promise<ChatResponse> {
   });
 }
 
+export function postCode(body: ChatRequest): Promise<CodeResponse> {
+  return request("/api/code", codeResponseSchema, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function postResearch(body: ResearchRequest): Promise<ResearchResponse> {
   return request("/api/research", researchResponseSchema, {
     method: "POST",
@@ -83,8 +92,8 @@ export function postResearch(body: ResearchRequest): Promise<ResearchResponse> {
   });
 }
 
-export function postEvaluate(): Promise<EvaluateResponse> {
-  return request("/api/evaluate", evaluateResponseSchema, {
+export function postEvaluate(limit?: number): Promise<EvaluateResponse> {
+  return request(`/api/evaluate${limit ? `?limit=${limit}` : ""}`, evaluateResponseSchema, {
     method: "POST",
   });
 }
@@ -117,4 +126,31 @@ export function uploadDocuments(files: File[]): Promise<UploadDocumentsResponse>
     method: "POST",
     body: formData,
   });
+}
+
+/** Instant .docx of a finished research result (server builds it without any LLM/KB calls). */
+export async function exportResearchDocx(query: string, result: ResearchResponse): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/reports/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query,
+      report: result.report,
+      sources: result.sources,
+      metrics: result.metrics,
+    }),
+  });
+  if (!response.ok) {
+    throw new ApiError(`Could not create the document (HTTP ${response.status})`, response.status);
+  }
+  const blob = await response.blob();
+  const match = /filename="?([^";]+)"?/.exec(response.headers.get("Content-Disposition") ?? "");
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = match?.[1] ?? "research_report.docx";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

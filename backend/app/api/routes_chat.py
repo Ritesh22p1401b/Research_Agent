@@ -18,7 +18,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     try:
         result = await get_llm_client().chat(messages=messages)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Chat completion failed")
         raise HTTPException(status_code=502, detail=f"LLM request failed: {exc}") from exc
 

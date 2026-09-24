@@ -101,6 +101,8 @@ class Settings(BaseSettings):
     # --- DOCX report generation ---
     docx_max_pages: int = 100
     docx_section_concurrency: int = 2
+    eval_concurrency: int = 3  # golden questions evaluated in parallel (the LLM client still caps total in-flight calls)
+    eval_max_retries: int = 0  # critic-triggered re-research is skipped in evaluation (it can double a question's cost)
     docx_fetch_pages: bool = True  # fetch full text of top web results for deeper chapters
     reports_dir: str = "data/reports"
 

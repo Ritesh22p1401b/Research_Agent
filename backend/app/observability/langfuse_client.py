@@ -38,7 +38,7 @@ def _init() -> None:
         )
         _ENABLED = True
         logger.info("Langfuse observability enabled (host=%s)", settings.langfuse_host)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Langfuse init failed, falling back to no-op tracing", exc_info=True)
         _ENABLED = False
 
@@ -68,7 +68,7 @@ def trace_span(name: str, **metadata: Any):
         if _ENABLED and _langfuse_client is not None:
             try:
                 _langfuse_client.event(name=name, metadata=data)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("Langfuse event emit failed", exc_info=True)
         else:
             logger.debug("trace[%s] %s", name, data)
@@ -109,5 +109,5 @@ def flush() -> None:
     if _ENABLED and _langfuse_client is not None:
         try:
             _langfuse_client.flush()
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("Langfuse flush failed", exc_info=True)

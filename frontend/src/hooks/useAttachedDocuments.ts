@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { getDocumentStatuses, uploadDocuments } from "@/lib/api-client";
 import type { DocumentSummary, IngestionSnapshot } from "@/lib/api-types";
 import { queryKeys } from "@/lib/query-keys";
+import { useResearchStore } from "@/store/research-store";
 
 export type AttachedDocument = {
   id: string;
@@ -23,7 +24,8 @@ const IN_FLIGHT = new Set<DocumentSummary["status"]>(["queued", "processing", "i
  */
 export function useAttachedDocuments() {
   const queryClient = useQueryClient();
-  const [attached, setAttached] = useState<{ id: string; filename: string }[]>([]);
+  const attached = useResearchStore((s) => s.attached);
+  const setAttached = useResearchStore((s) => s.setAttached);
   const ids = attached.map((d) => d.id);
 
   const statuses = useQuery({
@@ -54,11 +56,12 @@ export function useAttachedDocuments() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Upload failed"),
   });
 
-  const remove = useCallback((id: string) => {
-    setAttached((prev) => prev.filter((d) => d.id !== id));
-  }, []);
+  const remove = useCallback(
+    (id: string) => setAttached((prev) => prev.filter((d) => d.id !== id)),
+    [setAttached],
+  );
 
-  const clear = useCallback(() => setAttached([]), []);
+  const clear = useCallback(() => setAttached(() => []), [setAttached]);
 
   const byId = new Map((statuses.data?.documents ?? []).map((d) => [d.id, d]));
   const documents: AttachedDocument[] = attached.map((a) => {

@@ -1,15 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-
-import { postEvaluate } from "@/lib/api-client";
-import { queryKeys } from "@/lib/query-keys";
+import { useEvaluateStore } from "@/store/evaluate-store";
 
 export function useEvaluate() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: postEvaluate,
-    onSuccess: (data) => {
-      queryClient.setQueryData(queryKeys.evaluate, data);
-    },
-  });
+  const run = useEvaluateStore((s) => s.run);
+  const isPending = useEvaluateStore((s) => s.isPending);
+  const data = useEvaluateStore((s) => s.data);
+  return { run, isPending, data };
 }

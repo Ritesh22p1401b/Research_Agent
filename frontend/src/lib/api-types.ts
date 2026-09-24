@@ -172,3 +172,12 @@ export const ACCEPTED_DOCUMENT_EXTENSIONS = [
   ".html",
   ".htm",
 ] as const;
+
+export const codeResponseSchema = z.object({
+  reply: z.string(),
+  used_web: z.boolean().default(false),
+  from_memory: z.boolean().default(false),
+  learned: z.boolean().default(false),
+  llm_available: z.boolean().default(true),
+});
+export type CodeResponse = z.infer<typeof codeResponseSchema>;

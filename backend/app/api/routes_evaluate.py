@@ -1,7 +1,7 @@
 """POST /api/evaluate - runs the evaluation dataset (section 11 / 16)."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.core.logging import get_logger
 from app.core.schemas import EvaluateResponse
@@ -12,10 +12,10 @@ logger = get_logger(__name__)
 
 
 @router.post("/evaluate", response_model=EvaluateResponse)
-async def evaluate() -> EvaluateResponse:
+async def evaluate(limit: int | None = Query(default=None, ge=1, le=100)) -> EvaluateResponse:
     try:
-        outcome = await run_evaluation()
-    except Exception as exc:  # noqa: BLE001
+        outcome = await run_evaluation(limit)
+    except Exception as exc:
         logger.exception("Evaluation run failed")
         return EvaluateResponse(status="failed", error=str(exc))
 

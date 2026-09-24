@@ -19,7 +19,6 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
-from app.agents import evidence as evidence_gathering
 from app.agents import (
     analysis_agent,
     critic_agent,
@@ -27,6 +26,7 @@ from app.agents import (
     report_agent,
     research_agent,
 )
+from app.agents import evidence as evidence_gathering
 from app.core.config import get_settings
 from app.core.guardrails import GuardrailError, StepBudget
 from app.core.logging import get_logger
@@ -196,10 +196,13 @@ async def run_research(
     document_ids: list[str] | None = None,
     mode: str | None = None,
     report_depth: str = "none",
+    max_retries: int | None = None,
 ) -> dict[str, Any]:
     """Entry point used by POST /api/research (and the evaluation runner)."""
     settings = get_settings()
     budget = _new_budget()
+    if max_retries is not None:
+        budget.max_retries = max_retries
     resolved_mode = _resolve_mode(mode)
     graph = _build_graph(budget, settings.tool_timeout_seconds, resolved_mode)
 
@@ -228,7 +231,7 @@ def _maybe_start_docx(result: dict[str, Any], query: str, final_state: dict[str,
         from app.reporting.jobs import start_report_job
 
         result["docx_job_id"] = start_report_job(query, final_state, result["sources"], report_depth)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Could not start the DOCX report job")
 
 

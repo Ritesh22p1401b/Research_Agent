@@ -66,7 +66,7 @@ async def search_knowledge_base(query: str, top_k: int = 5, category: str | None
     async with manager.retrieval():
         try:
             chunks = await asyncio.to_thread(retrieve, query, top_k, 20, matched_category)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("search_knowledge_base failed for query=%r", query)
             chunks = None
         staged = manager.search_staged(query, top_k=top_k)
@@ -116,7 +116,7 @@ async def search_attached_documents(query: str, document_ids: list[str], top_k: 
     async with manager.retrieval():
         try:
             chunks = await asyncio.to_thread(retrieve, query, top_k, 20, None, document_ids)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("Scoped retrieval failed for attached documents", exc_info=True)
             chunks = []
         staged = manager.search_staged(query, top_k=top_k, document_ids=document_ids)

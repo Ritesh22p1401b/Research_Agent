@@ -1,13 +1,13 @@
 "use client";
 
 import { Loader2, Search } from "lucide-react";
-import { useState } from "react";
 
 import { AttachedDocuments } from "@/components/documents/AttachedDocuments";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAttachedDocuments } from "@/hooks/useAttachedDocuments";
 import type { ReportDepth, ResearchMode } from "@/lib/api-types";
+import { useResearchStore } from "@/store/research-store";
 
 export type ResearchOptions = {
   documentIds: string[];
@@ -25,9 +25,7 @@ export function ResearchForm({
   onSubmit: (query: string, options: ResearchOptions) => void;
   isPending: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<ResearchMode>("fast");
-  const [reportDepth, setReportDepth] = useState<ReportDepth>("standard");
+  const { query, mode, reportDepth, setForm } = useResearchStore();
   const attached = useAttachedDocuments();
 
   const canSubmit = !isPending && query.trim().length >= 3;
@@ -42,7 +40,7 @@ export function ResearchForm({
     >
       <Textarea
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => setForm({ query: e.target.value })}
         placeholder="e.g. Analyze the Indian EV market and identify major opportunities, risks and competitors."
         className="min-h-[72px]"
       />
@@ -57,7 +55,7 @@ export function ResearchForm({
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Research mode
-          <select value={mode} onChange={(e) => setMode(e.target.value as ResearchMode)} className={SELECT_CLASS}>
+          <select value={mode} onChange={(e) => setForm({ mode: e.target.value as ResearchMode })} className={SELECT_CLASS}>
             <option value="fast">Fast (parallel retrieval)</option>
             <option value="agentic">Deep (step-by-step agent)</option>
           </select>
@@ -66,7 +64,7 @@ export function ResearchForm({
           Word report
           <select
             value={reportDepth}
-            onChange={(e) => setReportDepth(e.target.value as ReportDepth)}
+            onChange={(e) => setForm({ reportDepth: e.target.value as ReportDepth })}
             className={SELECT_CLASS}
           >
             <option value="standard">Standard (~15-25 pages)</option>

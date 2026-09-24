@@ -1,7 +1,6 @@
 "use client";
 
-import { Loader2, PlayCircle } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2, PlayCircle, Zap } from "lucide-react";
 
 import { ResultsTable } from "@/components/evaluate/ResultsTable";
 import { SummaryCards } from "@/components/evaluate/SummaryCards";
@@ -12,21 +11,7 @@ import { useEvaluate } from "@/hooks/useEvaluate";
 
 export function EvaluationRunner() {
   const evaluate = useEvaluate();
-
-  const handleRun = () => {
-    evaluate.mutate(undefined, {
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : "Evaluation run failed");
-      },
-      onSuccess: (data) => {
-        if (data.status === "failed") {
-          toast.error(data.error ?? "Evaluation run failed");
-        } else {
-          toast.success(`Evaluated ${data.total_questions} questions`);
-        }
-      },
-    });
-  };
+  const { run } = evaluate;
 
   return (
     <div className="flex flex-col gap-4">
@@ -35,10 +20,16 @@ export function EvaluationRunner() {
           Runs every question in the golden dataset through the research pipeline and scores retrieval,
           citation accuracy and latency.
         </p>
-        <Button onClick={handleRun} disabled={evaluate.isPending}>
-          {evaluate.isPending ? <Loader2 className="animate-spin" /> : <PlayCircle />}
-          Run evaluation
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" onClick={() => run(4)} disabled={evaluate.isPending} title="4 questions spread across all categories - about a third of the time">
+            {evaluate.isPending ? <Loader2 className="animate-spin" /> : <Zap />}
+            Quick run (4)
+          </Button>
+          <Button onClick={() => run()} disabled={evaluate.isPending}>
+            {evaluate.isPending ? <Loader2 className="animate-spin" /> : <PlayCircle />}
+            Full run
+          </Button>
+        </div>
       </div>
 
       {evaluate.isPending && (

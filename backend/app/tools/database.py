@@ -88,6 +88,6 @@ async def run(sql: str) -> dict[str, Any]:
             result = await session.execute(text(bounded_sql))
             rows = [dict(row._mapping) for row in result.fetchall()]
         return {"rows": rows, "row_count": len(rows)}
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("database_query execution failed for: %s", bounded_sql)
         return {"error": "query_execution_failed"}

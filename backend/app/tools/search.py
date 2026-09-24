@@ -44,7 +44,7 @@ async def run(query: str, max_results: int | None = None) -> dict[str, Any]:
             results = await _search_serper(query, limit, settings.serper_api_key)
         else:
             results = await _search_duckduckgo(query, limit)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("web_search failed for query=%r via provider=%s", query, provider)
         return {"results": [], "error": "search_failed"}
 

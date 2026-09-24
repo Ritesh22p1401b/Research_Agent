@@ -59,7 +59,9 @@ async def judge_report(question: str, report: dict[str, Any], sources: list[dict
         sources_block=sources_block,
     )
     try:
-        parsed, _ = await get_llm_client().chat_json(messages=[{"role": "user", "content": prompt}])
+        parsed, _ = await get_llm_client().chat_json(
+            messages=[{"role": "user", "content": prompt}], temperature=0.0, max_tokens=200
+        )
         return JudgeScore(
             faithfulness=_clamp(parsed.get("faithfulness")),
             completeness=_clamp(parsed.get("completeness")),

@@ -52,5 +52,5 @@ def warm_up() -> None:
         _get_cross_encoder()
         get_bm25_index()
         logger.info("RAG models warmed up")
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("RAG warm-up failed (will lazy-load on first use)", exc_info=True)

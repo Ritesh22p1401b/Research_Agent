@@ -26,7 +26,7 @@ def rerank(query: str, candidates: list[RetrievedChunk], top_k: int = 5) -> list
         model = _get_cross_encoder()
         pairs = [(query, c.text) for c in candidates]
         scores = model.predict(pairs)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Reranker unavailable, falling back to hybrid ranking order", exc_info=True)
         return candidates[:top_k]
 

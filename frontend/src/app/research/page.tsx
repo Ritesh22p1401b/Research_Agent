@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-import { toast } from "sonner";
-
+import { ExportDocxButton } from "@/components/research/ExportDocxButton";
 import { MetricsRow } from "@/components/research/MetricsRow";
 import { ProgressLog } from "@/components/research/ProgressLog";
 import { ReportDownload } from "@/components/research/ReportDownload";
@@ -12,13 +10,7 @@ import { SourceList } from "@/components/research/SourceList";
 import { useResearchStream } from "@/hooks/useResearchStream";
 
 export default function ResearchPage() {
-  const { start, progress, result, status, error, isPending } = useResearchStream();
-
-  useEffect(() => {
-    if (status === "failed" && error) {
-      toast.error(error);
-    }
-  }, [status, error]);
+  const { start, progress, result, lastQuery, isPending } = useResearchStream();
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,6 +33,9 @@ export default function ResearchPage() {
       {result && (
         <>
           <MetricsRow metrics={result.metrics} />
+          <div>
+            <ExportDocxButton query={lastQuery} result={result} />
+          </div>
           {result.docx_job_id && <ReportDownload jobId={result.docx_job_id} />}
           <ReportView report={result.report} />
           <div>

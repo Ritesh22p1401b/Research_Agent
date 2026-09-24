@@ -203,7 +203,7 @@ class LLMClient:
         try:
             response = await self._client.get("/health", timeout=10)
             return response.status_code == 200
-        except Exception:  # noqa: BLE001 - health check must never raise
+        except Exception:
             logger.warning("LLM health check failed", exc_info=True)
             return False
 

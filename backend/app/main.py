@@ -13,7 +13,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import routes_chat, routes_documents, routes_evaluate, routes_health, routes_reports, routes_research
+from app.api import (
+    routes_chat,
+    routes_code,
+    routes_documents,
+    routes_evaluate,
+    routes_health,
+    routes_reports,
+    routes_research,
+)
 from app.core.config import get_settings
 from app.core.guardrails import GuardrailError
 from app.core.logging import get_logger, setup_logging
@@ -37,7 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async def _recover() -> None:
         try:
             await get_ingestion_manager().recover_interrupted()
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("Could not recover interrupted uploads (Postgres unavailable?)", exc_info=True)
 
     background = [asyncio.create_task(asyncio.to_thread(warm_up)), asyncio.create_task(_recover())]
@@ -67,6 +75,7 @@ app.include_router(routes_research.router)
 app.include_router(routes_evaluate.router)
 app.include_router(routes_documents.router)
 app.include_router(routes_reports.router)
+app.include_router(routes_code.router)
 
 
 @app.exception_handler(GuardrailError)

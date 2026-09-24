@@ -44,6 +44,6 @@ async def classify_document(text: str, known_categories: list[str]) -> str:
         parsed, _ = await get_llm_client().chat_json(messages=[{"role": "user", "content": prompt}])
         category = str(parsed.get("category", "")).strip().lower().replace(" ", "_")
         return category or "general"
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Document classification failed, defaulting to 'general'", exc_info=True)
         return "general"
